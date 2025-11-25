@@ -9,29 +9,7 @@ import re
 import uuid
 import requests
 import hashlib
-import streamlit_nested_layout  # imported for side effects
-
-# --- ENCRYPTION SETUP ---
-from cryptography.fernet import Fernet
-
-# Try to get key from environment, otherwise generate a session-only key (volatile!)
-# For persistence, you MUST set CLAUDE_CHAT_KEY in your .env or OS environment.
-_encryption_key = os.environ.get("CLAUDE_CHAT_KEY")
-
-if not _encryption_key:
-    # Generate a key for this run only if none exists (WARNING: Data unreadable after restart)
-    # In production/remote, you'd want to force a crash if this is missing.
-    if "temp_key" not in st.session_state:
-        st.session_state.temp_key = Fernet.generate_key().decode()
-        print(f"WARNING: No CLAUDE_CHAT_KEY found. Using temporary key: {st.session_state.temp_key}")
-        print("Save this key to CLAUDE_CHAT_KEY environment variable to persist data!")
-    _encryption_key = st.session_state.temp_key
-
-try:
-    cipher_suite = Fernet(_encryption_key)
-except Exception as e:
-    st.error(f"Invalid CLAUDE_CHAT_KEY: {e}")
-    st.stop()
+import streamlit_nested_layout  # type: ignore # imported for side effects
 
 # --- Helpers ---
 
@@ -83,6 +61,7 @@ st.set_page_config(
 
 system_prompt = "You are a helpful AI assistant. Be concise, accurate and clear."
 
+# Inject Tabler Icons + custom styles
 st.markdown(
     """
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
@@ -329,110 +308,42 @@ def render_message(content: str):
     normalized = normalize_code_snippets(content)
     st.markdown(normalized, unsafe_allow_html=False)
 
-# --- Helpers: threads (ENCRYPTED) ---
-
+# --- Helpers: threads
 def load_threads():
-    # Look for both encrypted (.json.enc) and plain (.json) files
-    # Favor encrypted if both exist (migration logic could go here)
-    files = list(DATA_DIR.glob("*.json")) + list(DATA_DIR.glob("*.json.enc"))
-    
-    # Filter out system files
-    system_files = {"project_index.json", "files_index.json", "usage_log.json"}
-    
-    # Unique thread names (stripping .enc suffix)
-    thread_names = set()
-    for f in files:
-        if f.name in system_files:
-            continue
-        # If it ends in .enc, strip it to get base .json name, then stem
-        name = f.name.replace(".enc", "") 
-        if name.endswith(".json"):
-            thread_names.add(name[:-5]) # remove .json
-            
-    # Sort by modification time of whichever file exists
-    def get_mtime(name):
-        enc_path = DATA_DIR / f"{name}.json.enc"
-        plain_path = DATA_DIR / f"{name}.json"
-        if enc_path.exists():
-            return enc_path.stat().st_mtime
-        if plain_path.exists():
-            return plain_path.stat().st_mtime
-        return 0
-
-    return sorted(list(thread_names), key=get_mtime, reverse=True)
+    files = list(DATA_DIR.glob("*.json"))
+    files = [f for f in files if f.name not in {"project_index.json", "files_index.json", "usage_log.json"}]
+    return sorted(
+        [f.stem for f in files],
+        key=lambda x: (DATA_DIR / f"{x}.json").stat().st_mtime,
+        reverse=True,
+    )
 
 def save_thread(name, conv):
     if conv:
-        # Save as Encrypted JSON
-        json_bytes = json.dumps(conv, indent=2).encode('utf-8')
-        encrypted_data = cipher_suite.encrypt(json_bytes)
-        
-        # Write to .json.enc
-        with open(DATA_DIR / f"{name}.json.enc", "wb") as f:
-            f.write(encrypted_data)
-            
-        # Optional: Remove plain .json if it existed (migration)
-        plain_path = DATA_DIR / f"{name}.json"
-        if plain_path.exists():
-            plain_path.unlink()
+        with open(DATA_DIR / f"{name}.json", "w") as f:
+            json.dump(conv, f, indent=2)
 
 def load_thread(name):
-    # Try Encrypted first
-    enc_path = DATA_DIR / f"{name}.json.enc"
-    if enc_path.exists():
-        try:
-            with open(enc_path, "rb") as f:
-                encrypted_data = f.read()
-            decrypted_data = cipher_suite.decrypt(encrypted_data)
-            return json.loads(decrypted_data.decode('utf-8'))
-        except Exception as e:
-            st.error(f"Failed to decrypt thread {name}: {e}")
-            return []
-            
-    # Fallback to Plain JSON (backward compatibility)
-    plain_path = DATA_DIR / f"{name}.json"
-    if plain_path.exists():
-        try:
-            with open(plain_path, "r") as f:
-                return json.load(f)
-        except Exception:
-            return []
-            
-    return []
+    try:
+        with open(DATA_DIR / f"{name}.json", "r") as f:
+            return json.load(f)
+    except Exception:
+        return []
 
 def delete_thread(name):
     try:
-        enc_path = DATA_DIR / f"{name}.json.enc"
-        if enc_path.exists():
-            enc_path.unlink()
-            
-        plain_path = DATA_DIR / f"{name}.json"
-        if plain_path.exists():
-            plain_path.unlink()
-            
+        (DATA_DIR / f"{name}.json").unlink()
         return True
     except Exception:
         return False
 
 def rename_thread(old_name: str, new_name: str) -> bool:
     try:
-        # Check if target exists
-        new_enc = DATA_DIR / f"{new_name}.json.enc"
-        new_plain = DATA_DIR / f"{new_name}.json"
-        if new_enc.exists() or new_plain.exists():
-            return False # Target already exists
-
-        # Rename source (check encrypted first)
-        old_enc = DATA_DIR / f"{old_name}.json.enc"
-        if old_enc.exists():
-            old_enc.rename(new_enc)
+        old_path = DATA_DIR / f"{old_name}.json"
+        new_path = DATA_DIR / f"{new_name}.json"
+        if old_path.exists() and not new_path.exists():
+            old_path.rename(new_path)
             return True
-            
-        old_plain = DATA_DIR / f"{old_name}.json"
-        if old_plain.exists():
-            old_plain.rename(new_plain)
-            return True
-            
         return False
     except Exception:
         return False
