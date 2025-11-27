@@ -63,8 +63,8 @@ USAGE_LOG_PATH = DATA_DIR / "usage_log.json"
 # Mobile-first: centered layout, collapsed sidebar
 st.set_page_config(
     page_title="Claude Chat",
-    layout="centered",  # Better for mobile
-    initial_sidebar_state="collapsed",  # Hide sidebar on mobile by default
+    layout="centered",
+    initial_sidebar_state="collapsed",
     menu_items={
         'Get Help': None,
         'Report a bug': None,
@@ -93,7 +93,6 @@ def require_totp_login():
     
     totp = pyotp.TOTP(secret)
     
-    # Mobile-friendly login screen
     st.markdown("""
         <style>
         .login-container {
@@ -128,49 +127,41 @@ require_totp_login()
 st.markdown("""
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
 <style>
-    /* Mobile-first typography */
     @media (max-width: 768px) {
         .stApp {
             padding-bottom: 180px !important;
         }
         
-        /* Hide sidebar toggle on very small screens */
         [data-testid="collapsedControl"] {
             top: 0.5rem;
             left: 0.5rem;
         }
         
-        /* Compact header */
         h1 {
             font-size: 1.5rem !important;
             margin: 0.5rem 0 !important;
         }
         
-        /* Full-width chat messages */
         [data-testid="stChatMessageContainer"] {
             max-width: 100% !important;
             padding: 0.5rem !important;
         }
         
-        /* Larger touch targets */
         button {
             min-height: 44px !important;
             font-size: 1rem !important;
         }
         
-        /* Better input sizing */
         input, textarea, select {
-            font-size: 16px !important; /* Prevents zoom on iOS */
+            font-size: 16px !important;
             min-height: 44px !important;
         }
         
-        /* Thread list compact */
         .sidebar-content {
             padding: 0.5rem !important;
         }
     }
     
-    /* Sticky bottom container - mobile optimized */
     .sticky-bottom {
         position: fixed;
         bottom: 0;
@@ -193,23 +184,19 @@ st.markdown("""
         }
     }
     
-    /* Chat input */
     [data-testid="stChatInput"] {
         border-radius: 24px !important;
     }
     
-    /* Icon sizing */
     .ti {
         font-size: 1.2rem;
     }
     
-    /* Thread item hover */
     .thread-item:hover {
         background: var(--hover-color);
         cursor: pointer;
     }
     
-    /* Code blocks */
     .code-block {
         margin: 12px 0;
         border-radius: 8px;
@@ -230,13 +217,11 @@ st.markdown("""
         background: var(--code-background) !important;
     }
     
-    /* Mobile: hide less important elements */
     @media (max-width: 768px) {
         .hide-on-mobile {
             display: none !important;
         }
         
-        /* Compact metrics */
         [data-testid="stMetric"] {
             padding: 0.5rem !important;
         }
@@ -394,7 +379,6 @@ def normalize_code_snippets(content: str) -> str:
 
 **Before:**
 {before_code}
-
 **After:**
 {after_code}
 """
@@ -410,7 +394,6 @@ def normalize_code_snippets(content: str) -> str:
         result = f"""
 **Before:**
 {before_code}
-
 **After:**
 {after_code}
 """
@@ -639,7 +622,7 @@ def refresh_files_index_from_anthropic() -> dict:
         st.error(f"Failed to refresh Files index from Anthropic: {e}")
         return idx
 
-# --- Session state ---
+# --- Session state initialization ---
 if "model" not in st.session_state:
     st.session_state.model = AVAILABLE_MODELS[0]
 
@@ -652,17 +635,11 @@ if "conversation" not in st.session_state:
         load_thread(st.session_state.thread) if st.session_state.thread else []
     )
 
-if "files" not in st.session_state:
-    st.session_state.files = []
-
 if "project_index" not in st.session_state:
     st.session_state.project_index = load_project_index()
 
 if "files_index" not in st.session_state:
     st.session_state.files_index = load_files_index()
-
-if "files_api_processed_batch" not in st.session_state:
-    st.session_state.files_api_processed_batch = False
 
 if "files_action" not in st.session_state:
     st.session_state.files_action = "analyze"
@@ -679,11 +656,55 @@ if "editing_thread" not in st.session_state:
 if "editing_thread_text" not in st.session_state:
     st.session_state.editing_thread_text = ""
 
-# --- MOBILE-OPTIMIZED SIDEBAR ---
+if "pending_file_upload" not in st.session_state:
+    st.session_state.pending_file_upload = False
+
+# --- CALLBACKS (No reruns unless necessary) ---
+def switch_thread(thread_name):
+    """Switch to a different thread without triggering rerun"""
+    st.session_state.thread = thread_name
+    st.session_state.conversation = load_thread(thread_name)
+    st.session_state.editing_thread = None
+
+def start_new_chat():
+    """Start a new chat without rerun"""
+    st.session_state.thread = None
+    st.session_state.conversation = []
+    st.session_state.editing_thread = None
+
+def start_edit_thread(thread_name):
+    """Enter edit mode for a thread"""
+    st.session_state.editing_thread = thread_name
+    st.session_state.editing_thread_text = thread_name
+
+def confirm_rename():
+    """Confirm thread rename"""
+    old = st.session_state.editing_thread
+    new = st.session_state.editing_thread_text
+    if old and new and new != old:
+        if rename_thread(old, new):
+            if st.session_state.thread == old:
+                st.session_state.thread = new
+    st.session_state.editing_thread = None
+
+def cancel_edit():
+    """Cancel edit mode"""
+    st.session_state.editing_thread = None
+
+def delete_thread_action(thread_name):
+    """Delete a thread"""
+    if delete_thread(thread_name):
+        if st.session_state.thread == thread_name:
+            st.session_state.thread = None
+            st.session_state.conversation = []
+
+# --- SIDEBAR ---
 with st.sidebar:
-    # Top metric: current chat name
+    st.markdown("### ⚙️ Settings")
+    
+    # Current chat indicator
     if st.session_state.thread:
-        st.metric(label="Current Chat", value=st.session_state.thread)
+        st.caption(f"📌 {st.session_state.thread}")
     else:
         st.caption("📌 New Chat")
     
@@ -702,12 +723,8 @@ with st.sidebar:
             st.session_state.model = m_id
             break
     
-    if st.button("➕ New Chat", use_container_width=True, type="primary"):
-        st.session_state.thread = None
-        st.session_state.conversation = []
-        st.session_state.files = []
-        st.session_state.editing_thread = None
-        st.rerun()
+    if st.button("➕ New Chat", use_container_width=True, type="primary", on_click=start_new_chat):
+        pass  # Callback handles it
     
     st.markdown("---")
     st.markdown("### 💬 Chats")
@@ -716,93 +733,69 @@ with st.sidebar:
     if not threads:
         st.caption("No chats yet")
     else:
-        # Mobile-friendly: show only 5 most recent, rest in expander
-        for i, thread in enumerate(threads[:5]):
+        # Show recent threads
+        for thread in threads[:10]:
             is_editing = st.session_state.editing_thread == thread
             active = st.session_state.thread == thread
             
             if is_editing:
                 col1, col2, col3 = st.columns([3, 1, 1])
                 with col1:
-                    new_name = st.text_input(
+                    st.text_input(
                         "Rename",
                         value=st.session_state.editing_thread_text,
                         key=f"edit_input_{thread}",
                         label_visibility="collapsed",
+                        on_change=lambda: setattr(st.session_state, 'editing_thread_text', st.session_state[f"edit_input_{thread}"])
                     )
                 with col2:
-                    if st.button("✓", key=f"confirm_{thread}", help="Confirm", use_container_width=True):
-                        if new_name and new_name != thread:
-                            if rename_thread(thread, new_name):
-                                if st.session_state.thread == thread:
-                                    st.session_state.thread = new_name
-                                st.session_state.editing_thread = None
-                                st.rerun()
+                    if st.button("✓", key=f"confirm_{thread}", help="Confirm", use_container_width=True, on_click=confirm_rename):
+                        pass
                 with col3:
-                    if st.button("✕", key=f"cancel_{thread}", help="Cancel", use_container_width=True):
-                        st.session_state.editing_thread = None
-                        st.rerun()
+                    if st.button("✕", key=f"cancel_{thread}", help="Cancel", use_container_width=True, on_click=cancel_edit):
+                        pass
             else:
                 col1, col2, col3 = st.columns([3, 0.5, 0.5])
                 with col1:
                     icon = "✓ " if active else ""
-                    # Truncate long names on mobile
                     display_name = thread if len(thread) < 25 else thread[:22] + "..."
                     if st.button(
                         f"{icon}{display_name}",
                         key=f"thread_{thread}",
                         use_container_width=True,
                         type="primary" if active else "tertiary",
+                        on_click=switch_thread,
+                        args=(thread,)
                     ):
-                        st.session_state.thread = thread
-                        st.session_state.conversation = load_thread(thread)
-                        st.session_state.files = []
-                        st.session_state.editing_thread = None
-                        st.rerun()
+                        pass  # Callback handles it
                 
                 with col2:
-                    if st.button("✎", key=f"edit_{thread}", help="Edit", use_container_width=True):
-                        st.session_state.editing_thread = thread
-                        st.session_state.editing_thread_text = thread
-                        st.rerun()
+                    if st.button("✎", key=f"edit_{thread}", help="Edit", use_container_width=True, on_click=start_edit_thread, args=(thread,)):
+                        pass
                 
                 with col3:
-                    if st.button("🗑", key=f"delete_{thread}", help="Delete", use_container_width=True):
-                        if delete_thread(thread):
-                            if st.session_state.thread == thread:
-                                st.session_state.thread = None
-                                st.session_state.conversation = []
-                            st.rerun()
-        
-        # Older threads in expander
-        if len(threads) > 5:
-            with st.expander(f"📚 {len(threads) - 5} more chats"):
-                for thread in threads[5:]:
-                    if st.button(thread, key=f"old_{thread}", use_container_width=True, type="tertiary"):
-                        st.session_state.thread = thread
-                        st.session_state.conversation = load_thread(thread)
-                        st.rerun()
+                    if st.button("🗑", key=f"delete_{thread}", help="Delete", use_container_width=True, on_click=delete_thread_action, args=(thread,)):
+                        pass
     
     st.markdown("---")
     
-    # Usage & Cost (collapsed)
+    # Usage & Cost
     with st.expander("📊 Usage (24h)"):
-        usage = summarize_usage_last_24h()
+        usage = st.session_state.usage_summary_24h
         if usage:
             st.metric("Cost", f"${usage['total_cost']:.4f}")
             st.caption(f"{usage['input_tokens']:,} in / {usage['output_tokens']:,} out")
         else:
             st.caption("No usage data")
     
-    # Files API (collapsed)
-    with st.expander("📁 Files API"):
+    # Files API
+    with st.expander("📁 Files API", expanded=False):
         st.caption("PDF and text files only")
         
         if st.button("🔄 Refresh", use_container_width=True, key="refresh_files"):
-            with st.spinner("Syncing..."):
-                st.session_state.files_index = refresh_files_index_from_anthropic()
-            st.rerun()
+            st.session_state.files_index = refresh_files_index_from_anthropic()
         
+        # File uploader (key stays constant to avoid reset)
         uploaded = st.file_uploader(
             "Upload",
             type=["pdf", "txt", "md", "json", "py", "js", "html", "css", "csv", "xml", "yaml", "yml"],
@@ -811,40 +804,38 @@ with st.sidebar:
             label_visibility="collapsed"
         )
         
+        # Process uploads WITHOUT rerun
         if uploaded:
+            idx = st.session_state.files_index
             for file in uploaded:
                 file_bytes = file.read()
                 file_hash = sha256_bytes(file_bytes)
-                idx = st.session_state.files_index
                 
                 if file.name not in idx:
                     try:
-                        with st.spinner(f"⬆️ {file.name}"):
-                            file_id = upload_file_to_anthropic(file.name, file_bytes, file.type or "text/plain")
-                            idx[file.name] = {
-                                "file_id": file_id,
-                                "size": len(file_bytes),
-                                "size_kb": len(file_bytes) / 1024,
-                                "mime_type": file.type or "text/plain",
-                                "sha256": file_hash,
-                                "uploaded_at": datetime.utcnow().isoformat(),
-                            }
-                            save_files_index(idx)
-                            st.session_state.files_index = idx
-                            st.success(f"✓ {file.name}")
+                        file_id = upload_file_to_anthropic(file.name, file_bytes, file.type or "text/plain")
+                        idx[file.name] = {
+                            "file_id": file_id,
+                            "size": len(file_bytes),
+                            "size_kb": len(file_bytes) / 1024,
+                            "mime_type": file.type or "text/plain",
+                            "sha256": file_hash,
+                            "uploaded_at": datetime.utcnow().isoformat(),
+                        }
+                        save_files_index(idx)
+                        st.session_state.files_index = idx
+                        st.success(f"✓ {file.name}", icon="✅")
                     except Exception as e:
-                        st.error(f"❌ {file.name}")
-                else:
-                    st.info(f"✓ {file.name} exists")
+                        st.error(f"❌ {file.name}: {e}")
         
+        # Show uploaded files
         idx = st.session_state.files_index
         if idx:
             st.caption(f"**{len(idx)} files:**")
-            for file_name, meta in list(idx.items())[:3]:  # Show max 3
-                size_kb = meta.get("size_kb", 0)
+            for file_name, meta in list(idx.items())[:5]:
                 col1, col2 = st.columns([3, 1])
                 with col1:
-                    st.caption(f"📄 {file_name[:20]}...")
+                    st.caption(f"📄 {file_name[:25]}...")
                 with col2:
                     if st.button("🗑", key=f"del_{file_name}", help="Delete", use_container_width=True):
                         try:
@@ -852,33 +843,14 @@ with st.sidebar:
                             del idx[file_name]
                             save_files_index(idx)
                             st.session_state.files_index = idx
-                            st.rerun()
+                            st.success("Deleted")
                         except Exception:
-                            st.error("Delete failed")
+                            st.error("Failed")
 
-# --- MAIN CONTENT (Mobile-optimized) ---
+# --- MAIN CONTENT ---
 
-# Compact header
-col1, col2 = st.columns([3, 1])
-with col1:
-    st.title("💬 Claude")
-with col2:
-    if st.session_state.thread:
-        # Thread dropdown for quick switching (mobile)
-        threads = load_threads()
-        if threads:
-            thread_short = st.session_state.thread[:15] + "..." if len(st.session_state.thread) > 15 else st.session_state.thread
-            selected_thread = st.selectbox(
-                "Thread",
-                options=threads,
-                index=threads.index(st.session_state.thread) if st.session_state.thread in threads else 0,
-                key="thread_quick_switch",
-                label_visibility="collapsed"
-            )
-            if selected_thread != st.session_state.thread:
-                st.session_state.thread = selected_thread
-                st.session_state.conversation = load_thread(selected_thread)
-                st.rerun()
+# Header
+st.title("💬 Claude Chat")
 
 # Conversation history
 if st.session_state.conversation:
@@ -892,15 +864,15 @@ if st.session_state.conversation:
 # Spacer for sticky bottom
 st.markdown('<div style="height: 180px;"></div>', unsafe_allow_html=True)
 
-# --- STICKY BOTTOM (Mobile-optimized) ---
+# --- STICKY BOTTOM ---
 st.markdown('<div class="sticky-bottom">', unsafe_allow_html=True)
 
-# Files API checkbox (compact on mobile)
+# Files attachment UI
 use_files = st.checkbox(
-    "📎 Files",
+    "📎 Attach files",
     value=False,
     key="use_files_main",
-    help="Attach files as context",
+    help="Add files as context",
 )
 
 selected_files = []
@@ -911,11 +883,10 @@ if use_files:
     if idx:
         file_names = list(idx.keys())
         selected_files = st.multiselect(
-            "Files",
+            "Select files",
             options=file_names,
             default=[],
             key="files_api_selected",
-            label_visibility="collapsed"
         )
         
         if selected_files:
@@ -924,7 +895,6 @@ if use_files:
                 options=["🔍 Analyze", "✏️ Edit", "📝 Summarize"],
                 default="🔍 Analyze",
                 key="files_action_pills",
-                label_visibility="collapsed"
             )
             
             action_map = {
@@ -935,10 +905,10 @@ if use_files:
             st.session_state.files_action = action_map.get(action_pill, "analyze")
             selected_action = st.session_state.files_action
     else:
-        st.caption("No files uploaded")
+        st.caption("No files uploaded yet")
 
 # Chat input
-user_input = st.chat_input("Message...", key="chat_input_main")
+user_input = st.chat_input("Type your message...", key="chat_input_main")
 
 st.markdown('</div>', unsafe_allow_html=True)
 
@@ -946,6 +916,7 @@ st.markdown('</div>', unsafe_allow_html=True)
 if user_input:
     full_msg = user_input
     
+    # Add context for file operations
     if use_files and selected_files:
         action_text = {
             "analyze": "Analyze the selected files and answer the question.",
@@ -954,14 +925,17 @@ if user_input:
         }[selected_action]
         full_msg = f"{action_text}\n\nQuestion: {user_input}"
     
+    # Create thread if needed
     if not st.session_state.thread:
         st.session_state.thread = generate_thread_name(user_input)
     
+    # Add user message
     st.session_state.conversation.append({
         "role": "user",
         "content": full_msg,
     })
     
+    # Build content blocks
     content_blocks = [{"type": "text", "text": full_msg}]
     
     if use_files and selected_files:
@@ -981,6 +955,7 @@ if user_input:
                         "context": f"User selected action: {selected_action} on this file.",
                     })
     
+    # Build API messages
     api_messages = []
     for msg in st.session_state.conversation[:-1]:
         api_messages.append({
@@ -993,6 +968,7 @@ if user_input:
         "content": content_blocks,
     })
     
+    # Call Claude API
     try:
         with st.spinner("💭 Thinking..."):
             extra_headers = {}
@@ -1010,6 +986,7 @@ if user_input:
             
             assistant_message = response.content[0].text if response.content else ""
             
+            # Record usage
             usage_entry = record_usage(
                 model=st.session_state.model,
                 input_tokens=response.usage.input_tokens,
@@ -1019,12 +996,16 @@ if user_input:
             st.session_state.last_usage = usage_entry
             st.session_state.usage_summary_24h = summarize_usage_last_24h()
             
+            # Add assistant response
             st.session_state.conversation.append({
                 "role": "assistant",
                 "content": assistant_message,
             })
             
+            # Save thread
             save_thread(st.session_state.thread, st.session_state.conversation)
+            
+            # NOW rerun to show the response
             st.rerun()
             
     except (APIConnectionError, APIStatusError, AuthenticationError, RateLimitError) as e:
