@@ -698,13 +698,11 @@ def delete_thread_action(thread_name):
             st.session_state.thread = None
             st.session_state.conversation = []
 
-# --- SIDEBAR ---
+# --- MOBILE-OPTIMIZED SIDEBAR ---
 with st.sidebar:
-    st.markdown("### ⚙️ Settings")
-    
-    # Current chat indicator
+    # Top metric: current chat name
     if st.session_state.thread:
-        st.caption(f"📌 {st.session_state.thread}")
+        st.metric(label="Current Chat", value=st.session_state.thread)
     else:
         st.caption("📌 New Chat")
     
@@ -850,7 +848,10 @@ with st.sidebar:
 # --- MAIN CONTENT ---
 
 # Header
-st.title("💬 Claude Chat")
+if st.session_state.thread:
+    st.title("🗨️ "+st.session_state.thread)
+else:
+    st.title("📌 New Chat")
 
 # Conversation history
 if st.session_state.conversation:
