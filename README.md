@@ -1,123 +1,115 @@
-# Claude Chat
+# 🤖 Claude Chat
 
-A Streamlit web app for Anthropic's Claude API with encrypted storage and TOTP authentication.
+A clean, secure chat interface for use with Anthropic API keys.
 
-## Features
+![Python](https://img.shields.io/badge/python-3.10+-blue.svg)
+![License](https://img.shields.io/badge/license-MIT-green.svg)
+![Streamlit](https://img.shields.io/badge/streamlit-1.28+-red.svg)
 
-- **Encrypted threads**: Conversations stored as encrypted files using Fernet
-- **TOTP login**: 2FA authentication via authenticator apps
-- **Files API**: Upload and attach documents to conversations
-- **Mobile responsive**: Works on desktop and mobile browsers
-- **Thread management**: Save, rename, and organize chat history
+---
 
-## Setup
+## ✨ Features
 
-### 1. Clone and install
+- **💬 Chat with Claude** - Multi-model support (Sonnet, Opus, Haiku)
+- **🔐 Encrypted storage** - Conversations encrypted locally using Fernet
+- **📁 Anthropics Files API** - Utilize Anthropics Files API in your conversations
+- **💾 Thread management** - Save and organize chat history
+- **📊 Usage tracking** - Monitor token usage and API costs
+- **📱 Mobile friendly** - Responsive design works on desktop and mobile
 
-```
+---
+
+## 🚀 Quick Start
+
+### 1. Clone & Install
 
 git clone https://github.com/siudika/claude_chat.git
-cd claude-chat
+cd claude_chat
 pip install -r requirements.txt
 
-```
-
-### 2. Create `.env` file
-
-```
-
-
-# Generate encryption key
-
-python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
-
-# Generate TOTP secret
-
-python -c "import pyotp; print(pyotp.random_base32())"
-
-```
-
-Create `.env` with:
-
-```
-
-ANTHROPIC_API_KEY=sk-ant-your-key
-CLAUDE_CHAT_KEY=your-generated-fernet-key
-CLAUDE_TOTP_SECRET=your-generated-totp-secret
-
-```
-
-### 3. Add TOTP to authenticator app
-
-- Open Google Authenticator / Microsoft Authenticator / Authy
-- Add account manually with the `CLAUDE_TOTP_SECRET` value
-- Save as "Claude Chat"
-
-### 4. Run
-
-```
+### 2. Run the App
 
 streamlit run claude_gui.py
 
-```
+The app will open at [http://localhost:8501](http://localhost:8501)
 
-Open http://localhost:8501 and log in with your authenticator code.
+### 3. First Launch Setup
 
-## Usage
+On first launch, you'll see a setup screen:
 
-- **New chat**: Click "New Chat" in sidebar
-- **Attach files**: Enable "Files" checkbox, upload PDFs/text files, select them before sending
-- **Switch threads**: Click thread names in sidebar
-- **Change model**: Use model dropdown in sidebar
+1. Click the link to [Anthropic Console](https://console.anthropic.com/account/keys)
+2. Copy your API key
+3. Paste it in the app
+4. Click **"Create .env & Launch"**
 
-## Deploy to Streamlit Cloud
+That's it! The app automatically:
 
-1. Push repo to GitHub (don't commit `.env`)
-2. Deploy at https://share.streamlit.io
-3. Add secrets in App Settings → Secrets:
+- ✅ Generates an encryption key
+- ✅ Creates your `.env` file
+- ✅ Starts the chat
 
-```
+---
 
-ANTHROPIC_API_KEY = "sk-ant-..."
-CLAUDE_CHAT_KEY = "your-key"
-CLAUDE_TOTP_SECRET = "your-secret"
+## 📖 Usage
 
-```
+| Action | How To |
+|--------|--------|
+| **New chat** | Click "➕ New Chat" in sidebar |
+| **Attach files** | Check "📎 Attach Files", upload documents, select before sending |
+| **Switch chats** | Click thread names in sidebar |
+| **Change model** | Use dropdown in sidebar |
+| **View usage** | Expand "📊 Usage (24h)" in sidebar |
 
-## Structure
 
-```
+---
 
-claude-chat/
-├── claude_gui.py          \# Main app
-├── requirements.txt       \# Dependencies
-├── .env                   \# Secrets (not committed)
-└── data/                  \# Encrypted threads (auto-created)
-├── *.json.enc         \# Encrypted conversations
-├── files_index.json   \# File metadata
-└── usage_log.json     \# Token usage
+## 🔒 Security
 
-```
+- 🔐 Conversations encrypted at rest using **Fernet (AES-128)**
+- 🚫 `.env` file never committed to git
+- 🔑 API key stored only locally
+- 💾 All data stays on your computer
 
-## Tech Stack
+---
 
-- **Streamlit**: Web framework
-- **Anthropic SDK**: Claude API client
-- **cryptography**: Fernet encryption
-- **pyotp**: TOTP implementation
+## ❓ Troubleshooting
 
-## Troubleshooting
+| Issue | Solution |
+|-------|----------|
+| **"API key invalid"** | Ensure key starts with `sk-ant-` from [Anthropic Console](https://console.anthropic.com/account/keys) |
+| **"CLAUDE_CHAT_KEY not found"** | Delete `.env` and restart app to regenerate |
+| **"Can't decrypt old chats"** | Encryption key changed. Keep your `.env` backed up |
+| **"Module not found"** | Run `pip install -r requirements.txt` |
 
-**"CLAUDE_CHAT_KEY not found"**  
-Make sure `.env` exists and contains the key.
+---
 
-**"Invalid code" on login**  
-Check your device time is synced. Codes expire every 30 seconds.
+## 📦 Tech Stack
 
-**"Failed to decrypt thread"**  
-Encryption key changed. Old threads can't be read without the original key.
+- [Streamlit](https://streamlit.io/) - Web framework
+- [Anthropic SDK](https://github.com/anthropics/anthropic-sdk-python) - Claude API client
+- [Cryptography](https://cryptography.io/) - Fernet encryption
+- [streamlit-extras](https://github.com/arnaudmiribel/streamlit-extras) - Enhanced UI components
+- [streamlit-option-menu](https://github.com/victoryhb/streamlit-option-menu) - Sidebar navigation
 
-## License
+---
 
-MIT
-```
+## 🤝 Contributing
+
+Contributions welcome! Please feel free to submit a Pull Request.
+
+---
+
+## 📄 License
+
+MIT License - see [LICENSE](LICENSE) file for details
+
+---
+
+## 🙏 Acknowledgments
+
+- Built with [Claude](https://claude.ai) by Anthropic
+- Inspired by the need for a simple, secure local chat interface
+
+---
+
+**Made with ❤️ for secure AI conversations**
