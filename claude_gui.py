@@ -94,25 +94,11 @@ def show_simple_login():
     st.markdown('<div class="login-container"><div class="login-card">', unsafe_allow_html=True)
 
     st.markdown("# 🤖 Claude Chat")
-    st.markdown("**Get started in 30 seconds**")
-
-    st.markdown("""
-    <div class="info-box">
-    👋 Welcome! Enter your Anthropic API key below to get started.
-    </div>
-    """, unsafe_allow_html=True)
 
     # Step 1: Get API key
     st.markdown("### Step 1: Get Your API Key")
-    st.markdown("Go to the Anthropic Console to create your API key:")
+    st.markdown("""Go to the <a href="https://console.anthropic.com/account/keys">Anthropic Console</a> to create your API key and paste it in the box below""", unsafe_allow_html=True)
 
-    st.markdown("""
-    <a href="https://console.anthropic.com/account/keys" target="_blank" class="console-link">
-        🔑 Open Anthropic Console
-    </a>
-    """, unsafe_allow_html=True)
-
-    st.markdown("### Step 2: Paste Your API Key")
 
     api_key_input = st.text_input(
         "API Key",
@@ -164,13 +150,7 @@ CLAUDE_CHAT_KEY={encryption_key}
                 except Exception as e:
                     st.error(f"Failed to create .env file: {e}")
 
-    st.markdown("""
-    <div class="info-box">
-    ℹ️ <strong>Your .env file is private</strong><br>
-    It's stored locally on your computer and will never be shared.
-    It's in .gitignore so it won't be committed to git.
-    </div>
-    """, unsafe_allow_html=True)
+
 
     st.markdown('</div></div>', unsafe_allow_html=True)
     st.stop()
@@ -387,7 +367,7 @@ except Exception as e:
     st.error(f"Failed to initialize Anthropic client: {e}")
     show_simple_login()
 
-    
+
 FILES_BETA_HEADER = "files-api-2025-04-14"
 ANTHROPIC_VERSION = "2023-06-01"
 API_BASE_URL = "https://api.anthropic.com/v1"
