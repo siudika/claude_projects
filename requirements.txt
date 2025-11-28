@@ -5,3 +5,5 @@ cryptography
 requests
 pyotp
 streamlit-nested-layout
+streamlit-option-menu
+streamlit-extras
