@@ -12,15 +12,166 @@ import hashlib
 import streamlit_nested_layout  # imported for side effects
 from cryptography.fernet import Fernet
 import pyotp  # for TOTP-based login
+from streamlit_option_menu import option_menu
+from streamlit_extras.bottom_container import bottom
 
-# --- ENCRYPTION SETUP ---
+# Add this function right after the imports (around line 50)
+# Replace the top section (after imports, around line 50) with this:
+
+def show_simple_login():
+    """Display simple one-step login screen"""
+    st.set_page_config(
+        page_title="Claude Chat - Setup",
+        layout="centered",
+        initial_sidebar_state="collapsed",
+    )
+
+    st.markdown("""
+    <style>
+    .login-container {
+        max-width: 500px;
+        margin: 3rem auto;
+        padding: 2rem;
+        border-radius: 16px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+    }
+    .login-card {
+        background: #0e1117;
+        padding: 2.5rem;
+        border-radius: 12px;
+        color: white;
+    }
+    .login-card h1 {
+        margin-top: 0;
+        color: #667eea;
+        text-align: center;
+        margin-bottom: 0.5rem;
+    }
+    .login-card p {
+        text-align: center;
+        color: #aaa;
+        margin-bottom: 2rem;
+    }
+    .info-box {
+        background: rgba(102, 126, 234, 0.1);
+        border-left: 4px solid #667eea;
+        padding: 1rem;
+        border-radius: 4px;
+        margin: 1rem 0;
+        font-size: 0.9rem;
+        color: #ccc;
+    }
+    .success-box {
+        background: rgba(76, 175, 80, 0.1);
+        border-left: 4px solid #4caf50;
+        padding: 1rem;
+        border-radius: 4px;
+        margin: 1rem 0;
+        font-size: 0.9rem;
+        color: #ccc;
+    }
+    .console-link {
+        display: inline-block;
+        padding: 0.75rem 1.5rem;
+        background: #667eea;
+        color: white;
+        text-decoration: none;
+        border-radius: 8px;
+        font-weight: bold;
+        transition: all 0.3s ease;
+        text-align: center;
+        width: 100%;
+        margin: 1rem 0;
+    }
+    .console-link:hover {
+        background: #764ba2;
+        text-decoration: none;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+    st.markdown('<div class="login-container"><div class="login-card">', unsafe_allow_html=True)
+
+    st.markdown("# 🤖 Claude Chat")
+
+    # Step 1: Get API key
+    st.markdown("### Step 1: Get Your API Key")
+    st.markdown("""Go to the <a href="https://console.anthropic.com/account/keys">Anthropic Console</a> to create your API key and paste it in the box below""", unsafe_allow_html=True)
+
+
+    api_key_input = st.text_input(
+        "API Key",
+        type="password",
+        placeholder="sk-ant-api03-...",
+        help="Your API key starts with 'sk-ant-'",
+        label_visibility="collapsed"
+    )
+
+    if api_key_input:
+        # Validate format
+        if not api_key_input.startswith("sk-ant-"):
+            st.error("❌ Invalid format. API key should start with 'sk-ant-'")
+        else:
+            st.success("✓ Valid API key format")
+
+            # Generate encryption key automatically
+            from cryptography.fernet import Fernet
+            encryption_key = Fernet.generate_key().decode()
+
+            st.markdown("""
+            <div class="success-box">
+            ✅ <strong>Ready to setup!</strong><br>
+            Your encryption key has been generated automatically.
+            </div>
+            """, unsafe_allow_html=True)
+
+            if st.button("🚀 Create .env & Launch", type="primary", use_container_width=True, key="launch_btn"):
+                # Create .env file
+                env_content = f"""# Anthropic API Configuration
+ANTHROPIC_API_KEY={api_key_input}
+
+# Encryption Key (for conversation storage)
+CLAUDE_CHAT_KEY={encryption_key}
+"""
+
+                try:
+                    env_path = Path(".env")
+                    env_path.write_text(env_content)
+
+                    st.success("✅ .env file created successfully!")
+                    st.info("🔄 Reloading app... Please wait.")
+
+                    # Reload environment variables
+                    import time
+                    time.sleep(1)
+                    st.rerun()
+
+                except Exception as e:
+                    st.error(f"Failed to create .env file: {e}")
+
+
+
+    st.markdown('</div></div>', unsafe_allow_html=True)
+    st.stop()
+
+
+def check_env_setup() -> bool:
+    """Check if .env has required API key and encryption key"""
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    encryption_key = os.environ.get("CLAUDE_CHAT_KEY")
+    return bool(api_key) and bool(encryption_key)
+# --- Load environment ---
+load_dotenv()
+
+# --- Check if setup is needed ---
+if not check_env_setup():
+    show_simple_login()
+
+# --- Encryption setup ---
 _encryption_key = os.environ.get("CLAUDE_CHAT_KEY")
 if not _encryption_key:
-    st.error(
-        "CLAUDE_CHAT_KEY not found. Set it in your environment or .env file.\n"
-        "Example (bash): export CLAUDE_CHAT_KEY=$(python -c \"from cryptography.fernet import Fernet; "
-        "print(Fernet.generate_key().decode())\")"
-    )
+    st.error("CLAUDE_CHAT_KEY not found in .env")
     st.stop()
 
 try:
@@ -28,7 +179,6 @@ try:
 except Exception as e:
     st.error(f"Invalid CLAUDE_CHAT_KEY: {e}")
     st.stop()
-
 # --- Helpers ---
 def sha256_bytes(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
@@ -75,53 +225,53 @@ st.set_page_config(
 system_prompt = "You are a helpful AI assistant. Be concise, accurate and clear."
 
 # --- TOTP LOGIN GATE ---
-def require_totp_login():
-    """Gate the entire app behind a TOTP-based login."""
-    if "authenticated" not in st.session_state:
-        st.session_state.authenticated = False
+# def require_totp_login():
+#     """Gate the entire app behind a TOTP-based login."""
+#     if "authenticated" not in st.session_state:
+#         st.session_state.authenticated = False
     
-    if st.session_state.authenticated:
-        return
+#     if st.session_state.authenticated:
+#         return
     
-    secret = os.environ.get("CLAUDE_TOTP_SECRET")
-    if not secret:
-        st.error(
-            "CLAUDE_TOTP_SECRET not set. Configure it in your environment or .env file "
-            "to enable TOTP login."
-        )
-        st.stop()
+#     secret = os.environ.get("CLAUDE_TOTP_SECRET")
+#     if not secret:
+#         st.error(
+#             "CLAUDE_TOTP_SECRET not set. Configure it in your environment or .env file "
+#             "to enable TOTP login."
+#         )
+#         st.stop()
     
-    totp = pyotp.TOTP(secret)
+#     totp = pyotp.TOTP(secret)
     
-    st.markdown("""
-        <style>
-        .login-container {
-            max-width: 400px;
-            margin: 0 auto;
-            padding: 2rem 1rem;
-        }
-        </style>
-    """, unsafe_allow_html=True)
+#     st.markdown("""
+#         <style>
+#         .login-container {
+#             max-width: 400px;
+#             margin: 0 auto;
+#             padding: 2rem 1rem;
+#         }
+#         </style>
+#     """, unsafe_allow_html=True)
     
-    st.markdown('<div class="login-container">', unsafe_allow_html=True)
-    st.title("🔐 Claude Chat")
-    st.write("Enter your authenticator code to continue")
+#     st.markdown('<div class="login-container">', unsafe_allow_html=True)
+#     st.title("🔐 Claude Chat")
+#     st.write("Enter your authenticator code to continue")
     
-    code = st.text_input("6-digit code", type="password", max_chars=8, key="totp_code")
+#     code = st.text_input("6-digit code", type="password", max_chars=8, key="totp_code")
     
-    if st.button("🔓 Unlock", type="primary", use_container_width=True, key="unlock_btn"):
-        if totp.verify(code, valid_window=1):
-            st.session_state.authenticated = True
-            st.success("✓ Authenticated")
-            st.rerun()
-        else:
-            st.error("❌ Invalid code")
+#     if st.button("🔓 Unlock", type="primary", use_container_width=True, key="unlock_btn"):
+#         if totp.verify(code, valid_window=1):
+#             st.session_state.authenticated = True
+#             st.success("✓ Authenticated")
+#             st.rerun()
+#         else:
+#             st.error("❌ Invalid code")
     
-    st.caption("💡 Codes refresh every 30 seconds")
-    st.markdown('</div>', unsafe_allow_html=True)
-    st.stop()
+#     st.caption("💡 Codes refresh every 30 seconds")
+#     st.markdown('</div>', unsafe_allow_html=True)
+#     st.stop()
 
-require_totp_login()
+# require_totp_login()
 
 # --- MOBILE-RESPONSIVE STYLES ---
 st.markdown("""
@@ -161,33 +311,6 @@ st.markdown("""
             padding: 0.5rem !important;
         }
     }
-    
-    .sticky-bottom {
-        position: fixed;
-        bottom: 0;
-        left: 0;
-        right: 0;
-        background: var(--background-color);
-        padding: 0.75rem;
-        z-index: 999;
-        border-top: 1px solid var(--border-color);
-        box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
-    }
-    
-    @media (min-width: 769px) {
-        .sticky-bottom {
-            max-width: 730px;
-            margin: 0 auto;
-        }
-        .stApp {
-            padding-bottom: 200px !important;
-        }
-    }
-    
-    [data-testid="stChatInput"] {
-        border-radius: 24px !important;
-    }
-    
     .ti {
         font-size: 1.2rem;
     }
@@ -236,14 +359,14 @@ st.markdown("""
 # --- Anthropic client ---
 api_key = os.environ.get("ANTHROPIC_API_KEY")
 if not api_key:
-    st.error("ANTHROPIC_API_KEY not found")
-    st.stop()
+    show_simple_login()
 
 try:
     client = Anthropic(api_key=api_key)
 except Exception as e:
     st.error(f"Failed to initialize Anthropic client: {e}")
-    st.stop()
+    show_simple_login()
+
 
 FILES_BETA_HEADER = "files-api-2025-04-14"
 ANTHROPIC_VERSION = "2023-06-01"
@@ -700,12 +823,38 @@ def delete_thread_action(thread_name):
 
 # --- MOBILE-OPTIMIZED SIDEBAR ---
 with st.sidebar:
-    # Top metric: current chat name
-    if st.session_state.thread:
-        st.metric(label="Current Chat", value=st.session_state.thread)
+    # Current chat indicator with inline edit/delete buttons
+    if st.session_state.editing_thread:
+        # Edit mode - show input field with confirm/cancel buttons
+        col1, col2, col3 = st.columns([3, 1, 1], vertical_alignment="center")
+        with col1:
+            st.text_input(
+                "Rename",
+                value=st.session_state.editing_thread_text,
+                key=f"edit_input_{st.session_state.editing_thread}",
+                label_visibility="collapsed",
+                on_change=lambda: setattr(st.session_state, 'editing_thread_text', st.session_state[f"edit_input_{st.session_state.editing_thread}"])
+            )
+        with col2:
+            if st.button("✓", key=f"confirm_top", help="Confirm", use_container_width=True, on_click=confirm_rename):
+                pass
+        with col3:
+            if st.button("✕", key=f"cancel_top", help="Cancel", use_container_width=True, on_click=cancel_edit):
+                pass
+    elif st.session_state.thread:
+        # Normal mode - show thread name with edit/delete buttons
+        col1, col2, col3 = st.columns([4, 1, 1], vertical_alignment="center")
+        with col1:
+            st.metric(label="Current Chat", value=st.session_state.thread)
+        with col2:
+            if st.button("✎", key="edit_current_top", help="Rename", type="tertiary", use_container_width=True, on_click=start_edit_thread, args=(st.session_state.thread,)):
+                pass
+        with col3:
+            if st.button("🗑", key="delete_current_top", help="Delete", type="tertiary", use_container_width=True, on_click=delete_thread_action, args=(st.session_state.thread,)):
+                pass
     else:
-        st.caption("📌 New Chat")
-    
+        st.metric(label="Current Chat", value="📌 New Chat")
+    st.space(size="small")
     # Model selector
     model_options = AVAILABLE_MODELS
     model_labels = {m: prettify_model_name(m) for m in model_options}
@@ -720,63 +869,57 @@ with st.sidebar:
         if lbl == selected_label:
             st.session_state.model = m_id
             break
+
+     # st.markdown("### 💬 Chats")
     
-    if st.button("➕ New Chat", use_container_width=True, type="primary", on_click=start_new_chat):
-        pass  # Callback handles it
-    
-    st.markdown("---")
-    st.markdown("### 💬 Chats")
-    
+    st.space(size="large")
     threads = load_threads()
     if not threads:
         st.caption("No chats yet")
     else:
-        # Show recent threads
-        for thread in threads[:10]:
-            is_editing = st.session_state.editing_thread == thread
-            active = st.session_state.thread == thread
-            
-            if is_editing:
-                col1, col2, col3 = st.columns([3, 1, 1])
-                with col1:
-                    st.text_input(
-                        "Rename",
-                        value=st.session_state.editing_thread_text,
-                        key=f"edit_input_{thread}",
-                        label_visibility="collapsed",
-                        on_change=lambda: setattr(st.session_state, 'editing_thread_text', st.session_state[f"edit_input_{thread}"])
-                    )
-                with col2:
-                    if st.button("✓", key=f"confirm_{thread}", help="Confirm", use_container_width=True, on_click=confirm_rename):
-                        pass
-                with col3:
-                    if st.button("✕", key=f"cancel_{thread}", help="Cancel", use_container_width=True, on_click=cancel_edit):
-                        pass
-            else:
-                col1, col2, col3 = st.columns([3, 0.5, 0.5])
-                with col1:
-                    icon = "✓ " if active else ""
-                    display_name = thread if len(thread) < 25 else thread[:22] + "..."
-                    if st.button(
-                        f"{icon}{display_name}",
-                        key=f"thread_{thread}",
-                        use_container_width=True,
-                        type="primary" if active else "tertiary",
-                        on_click=switch_thread,
-                        args=(thread,)
-                    ):
-                        pass  # Callback handles it
-                
-                with col2:
-                    if st.button("✎", key=f"edit_{thread}", help="Edit", use_container_width=True, on_click=start_edit_thread, args=(thread,)):
-                        pass
-                
-                with col3:
-                    if st.button("🗑", key=f"delete_{thread}", help="Delete", use_container_width=True, on_click=delete_thread_action, args=(thread,)):
-                        pass
-    
-    st.markdown("---")
-    
+        
+        # Use option-menu for thread list
+        thread_options = [thread if len(thread) < 30 else thread[:27] + "..." for thread in threads[:15]]
+        current_idx = threads.index(st.session_state.thread) if st.session_state.thread in threads[:15] else 0
+        
+        selected = option_menu(
+            menu_title=None,
+            options=thread_options,
+            icons=["chat-dots-fill"] * len(thread_options),
+            menu_icon="cast",
+            default_index=current_idx,
+            key="thread_menu",
+            styles={
+                "container": {"padding": "0!important", "background-color": "transparent"},
+                "icon": {"color": "white", "font-size": "20px"},
+                "nav-link": {
+                    "font-size": "18px",
+                    "text-align": "left",
+                    "margin": "2px",
+                    "padding": "16px",
+                    "border-radius": "8px",
+                },
+                "nav-link-selected": {"background-color": "#202129", "color": "white"},
+            }
+        )
+        
+        # Handle thread switch
+        if selected and st.session_state.thread and selected != (st.session_state.thread if len(st.session_state.thread) < 30 else st.session_state.thread[:27] + "..."):
+            # Find full thread name
+            for i, short_name in enumerate(thread_options):
+                if short_name == selected:
+                    switch_thread(threads[i])
+                    break
+    if st.button("➕ New Chat", use_container_width=True, type="secondary", on_click=start_new_chat):
+        pass  # Callback handles it
+        
+    # Dynamic spacer - pushes content to bottom
+    threads = load_threads()
+    # Calculate how many empty lines needed based on thread count
+    spacer_lines = max(1, 20 - len(threads))
+    for _ in range(spacer_lines):
+        st.write("")
+
     # Usage & Cost
     with st.expander("📊 Usage (24h)"):
         usage = st.session_state.usage_summary_24h
@@ -802,29 +945,40 @@ with st.sidebar:
             label_visibility="collapsed"
         )
         
-        # Process uploads WITHOUT rerun
+        # Process uploads WITHOUT rerun (with overwrite logic)
         if uploaded:
             idx = st.session_state.files_index
             for file in uploaded:
                 file_bytes = file.read()
                 file_hash = sha256_bytes(file_bytes)
                 
-                if file.name not in idx:
-                    try:
-                        file_id = upload_file_to_anthropic(file.name, file_bytes, file.type or "text/plain")
-                        idx[file.name] = {
-                            "file_id": file_id,
-                            "size": len(file_bytes),
-                            "size_kb": len(file_bytes) / 1024,
-                            "mime_type": file.type or "text/plain",
-                            "sha256": file_hash,
-                            "uploaded_at": datetime.utcnow().isoformat(),
-                        }
-                        save_files_index(idx)
-                        st.session_state.files_index = idx
-                        st.success(f"✓ {file.name}", icon="✅")
-                    except Exception as e:
-                        st.error(f"❌ {file.name}: {e}")
+                # Check if file exists and delete old version
+                if file.name in idx:
+                    old_file_id = idx[file.name].get("file_id")
+                    if old_file_id:
+                        try:
+                            delete_file_from_anthropic(old_file_id)
+                            st.info(f"🔄 Overwriting {file.name}")
+                        except Exception:
+                            pass  # Continue even if delete fails
+                
+                # Upload new version
+                try:
+                    file_id = upload_file_to_anthropic(file.name, file_bytes, file.type or "text/plain")
+                    idx[file.name] = {
+                        "file_id": file_id,
+                        "size": len(file_bytes),
+                        "size_kb": len(file_bytes) / 1024,
+                        "mime_type": file.type or "text/plain",
+                        "sha256": file_hash,
+                        "uploaded_at": datetime.utcnow().isoformat(),
+                    }
+                    save_files_index(idx)
+                    st.session_state.files_index = idx
+                    st.success(f"✓ {file.name}", icon="✅")
+                except Exception as e:
+                    st.error(f"❌ {file.name}: {e}")
+
         
         # Show uploaded files
         idx = st.session_state.files_index
@@ -835,7 +989,7 @@ with st.sidebar:
                 with col1:
                     st.caption(f"📄 {file_name[:25]}...")
                 with col2:
-                    if st.button("🗑", key=f"del_{file_name}", help="Delete", use_container_width=True):
+                    if st.button("🗑", type="tertiary", key=f"del_{file_name}", help="Delete", use_container_width=True):
                         try:
                             delete_file_from_anthropic(meta.get("file_id", ""))
                             del idx[file_name]
@@ -861,57 +1015,73 @@ if st.session_state.conversation:
         avatar = "👤" if role == "user" else "🤖"
         with st.chat_message(role, avatar=avatar):
             render_message(content)
+    
+    # Auto-scroll to bottom after messages are rendered
+    st.markdown("""
+        <script>
+        setTimeout(function() {
+            window.scrollTo({
+                top: document.body.scrollHeight,
+                behavior: 'smooth'
+            });
+        }, 100);
+        </script>
+    """, unsafe_allow_html=True)
 
-# Spacer for sticky bottom
-st.markdown('<div style="height: 180px;"></div>', unsafe_allow_html=True)
-
-# --- STICKY BOTTOM ---
-st.markdown('<div class="sticky-bottom">', unsafe_allow_html=True)
-
-# Files attachment UI
-use_files = st.checkbox(
-    "📎 Attach files",
-    value=False,
-    key="use_files_main",
-    help="Add files as context",
-)
-
-selected_files = []
-selected_action = st.session_state.files_action
-
-if use_files:
-    idx = st.session_state.files_index
-    if idx:
-        file_names = list(idx.keys())
-        selected_files = st.multiselect(
-            "Select files",
-            options=file_names,
-            default=[],
-            key="files_api_selected",
-        )
-        
-        if selected_files:
-            action_pill = st.pills(
-                "Action",
-                options=["🔍 Analyze", "✏️ Edit", "📝 Summarize"],
-                default="🔍 Analyze",
-                key="files_action_pills",
-            )
+# --- STICKY BOTTOM CONTAINER ---
+with bottom():
+    # Chat input first
+    user_input = st.chat_input("Type your message...", key="chat_input_main")
+    
+    # Files checkbox below input
+    use_files = st.checkbox(
+        "📎 Attach files",
+        value=False,
+        key="use_files_main"
+    )
+    
+    # Initialize variables
+    selected_files = []
+    selected_action = st.session_state.files_action
+    
+    # Files section (expands when checkbox is checked)
+    if use_files:
+        idx = st.session_state.files_index
+        if idx:
+            file_names = list(idx.keys())
             
-            action_map = {
-                "🔍 Analyze": "analyze",
-                "✏️ Edit": "edit",
-                "📝 Summarize": "summarize",
-            }
-            st.session_state.files_action = action_map.get(action_pill, "analyze")
-            selected_action = st.session_state.files_action
-    else:
-        st.caption("No files uploaded yet")
+            # Put multiselect and pills inline
+            col1, col2 = st.columns([4, 1])
+            
+            with col1:
+                selected_files = st.multiselect(
+                    "",
+                    options=file_names,
+                    label_visibility="collapsed",
+                    default=[],
+                    key="files_api_selected",
+                )
+            
+            with col2:
+                if selected_files:
+                    action_pill = st.pills(
+                        "",
+                        options=["🔍", "✏️", "📝"],
+                        label_visibility="collapsed",
+                        default="🔍",
+                        key="files_action_pills",
+                    )
+                    
+                    action_map = {
+                        "🔍": "analyze",
+                        "✏️": "edit",
+                        "📝": "summarize",
+                    }
+                    st.session_state.files_action = action_map.get(action_pill, "analyze")
+                    selected_action = st.session_state.files_action
+        else:
+            st.caption("No files uploaded yet")
 
-# Chat input
-user_input = st.chat_input("Type your message...", key="chat_input_main")
-
-st.markdown('</div>', unsafe_allow_html=True)
 
 # --- MESSAGE PROCESSING ---
 if user_input:
